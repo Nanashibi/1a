@@ -4,9 +4,24 @@ Fast, accurate PDF outline extraction tool that identifies document titles and h
 
 ## Quick Start
 
-1. Place your PDF files in the `input` directory
-2. Run the Docker commands below
-3. Get results in the `output` directory
+1. **Create directories and add your PDFs:**
+   ```bash
+   # Create input and output directories
+   mkdir -p input output
+   
+   # Place your PDF files in the input directory
+   ```
+
+2. **Build and run:**
+   ```bash
+   # Build the Docker image
+   docker build --platform linux/amd64 -t 1a .
+   
+   # Run the container
+   docker run --rm -v $(pwd)/input:/app/input:ro -v $(pwd)/output:/app/output --network none 1a
+   ```
+
+3. **Get results:** Check the `output` directory for JSON files with extracted outlines.
 
 ## Docker Usage
 
