@@ -12,18 +12,181 @@ from typing import List, Dict
 import fitz
 
 
+# Multilingual patterns for non-English languages
+MULTILINGUAL_PATTERNS = {
+    'spanish': {
+        'form_patterns': [
+            'formulario de solicitud', 'servidor público', 'funcionario gubernamental',
+            'designación', 'servicio', 'salario', 'permanente o temporal'
+        ],
+        'tech_headings': [
+            'historial de revisiones', 'tabla de contenidos', 'agradecimientos',
+            'introducción', 'referencias', 'marcas comerciales', 'documentos',
+            'audiencia objetivo', 'trayectorias profesionales', 'objetivos de aprendizaje',
+            'requisitos de entrada', 'estructura y duración del curso', 'contenido'
+        ],
+        'business_headings': [
+            'antecedentes', 'resumen', 'hitos', 'enfoque', 
+            'evaluación', 'apéndice', 'términos de referencia'
+        ]
+    },
+    'french': {
+        'form_patterns': [
+            'formulaire de demande', 'fonctionnaire', 'agent gouvernemental',
+            'désignation', 'service', 'salaire', 'permanent ou temporaire'
+        ],
+        'tech_headings': [
+            'historique des révisions', 'table des matières', 'remerciements',
+            'introduction', 'références', 'marques déposées', 'documents',
+            'public cible', 'parcours professionnels', 'objectifs d\'apprentissage',
+            'conditions d\'entrée', 'structure et durée du cours', 'contenu'
+        ],
+        'business_headings': [
+            'contexte', 'résumé', 'jalons', 'approche', 
+            'évaluation', 'annexe', 'termes de référence'
+        ]
+    },
+    'german': {
+        'form_patterns': [
+            'antragsformular', 'beamter', 'regierungsangestellter',
+            'bezeichnung', 'dienst', 'gehalt', 'dauerhaft oder vorübergehend'
+        ],
+        'tech_headings': [
+            'revisionshistorie', 'inhaltsverzeichnis', 'danksagungen',
+            'einführung', 'referenzen', 'warenzeichen', 'dokumente',
+            'zielgruppe', 'karrierewege', 'lernziele',
+            'eingangsvoraussetzungen', 'struktur und kursdauer', 'inhalt'
+        ],
+        'business_headings': [
+            'hintergrund', 'zusammenfassung', 'meilensteine', 'ansatz', 
+            'bewertung', 'anhang', 'referenzbedingungen'
+        ]
+    },
+    'hindi': {
+        'form_patterns': [
+            'आवेदन पत्र', 'सरकारी कर्मचारी', 'सरकारी अधिकारी',
+            'पदनाम', 'सेवा', 'वेतन', 'स्थायी या अस्थायी'
+        ],
+        'tech_headings': [
+            'संशोधन इतिहास', 'विषय सूची', 'आभार', 'परिचय', 'संदर्भ',
+            'ट्रेडमार्क', 'दस्तावेज', 'लक्षित दर्शक', 'करियर पथ',
+            'सीखने के उद्देश्य', 'प्रवेश आवश्यकताएं', 'संरचना और पाठ्यक्रम अवधि', 'सामग्री'
+        ],
+        'business_headings': [
+            'पृष्ठभूमि', 'सारांश', 'मील के पत्थर', 'दृष्टिकोण',
+            'मूल्यांकन', 'परिशिष्ट', 'संदर्भ की शर्तें'
+        ]
+    },
+    'chinese': {
+        'form_patterns': [
+            '申请表', '公务员', '政府工作人员', '职务', '服务', '工资', '永久或临时'
+        ],
+        'tech_headings': [
+            '修订历史', '目录', '致谢', '介绍', '参考文献', '商标', '文档',
+            '目标受众', '职业道路', '学习目标', '入学要求', '结构和课程持续时间', '内容'
+        ],
+        'business_headings': [
+            '背景', '摘要', '里程碑', '方法', '评估', '附录', '参考条款'
+        ]
+    },
+    'japanese': {
+        'form_patterns': [
+            '申請書', '公務員', '政府職員', '指定', 'サービス', '給与', '恒久的または一時的'
+        ],
+        'tech_headings': [
+            '改訂履歴', '目次', '謝辞', '紹介', '参考文献', '商標', '文書',
+            '対象読者', 'キャリアパス', '学習目標', '入学要件', '構造とコース期間', 'コンテンツ'
+        ],
+        'business_headings': [
+            '背景', '要約', 'マイルストーン', 'アプローチ', '評価', '付録', '参照条項'
+        ]
+    },
+    'arabic': {
+        'form_patterns': [
+            'نموذج طلب', 'موظف حكومي', 'خادم الحكومة', 'تعيين', 'خدمة', 'راتب', 'دائم أو مؤقت'
+        ],
+        'tech_headings': [
+            'تاريخ المراجعة', 'جدول المحتويات', 'شكر وتقدير', 'مقدمة', 'مراجع', 'علامات تجارية', 'وثائق',
+            'الجمهور المستهدف', 'مسارات مهنية', 'أهداف التعلم', 'متطلبات الدخول', 'الهيكل ومدة الدورة', 'محتوى'
+        ],
+        'business_headings': [
+            'خلفية', 'ملخص', 'معالم', 'نهج', 'تقييم', 'ملحق', 'شروط مرجعية'
+        ]
+    }
+}
+
+
 class PDFOutlineExtractor:
     def __init__(self):
-        pass
+        self.detected_language = None
+        self.multilingual_patterns = None
+    
+    def _detect_non_english_language(self, doc_text: str) -> str:
+        """Detect non-English languages in the document."""
+        doc_text_lower = doc_text.lower()
+        
+        # Character-based detection for script-specific languages
+        if re.search(r'[देवनागरी\u0900-\u097F]', doc_text):
+            return 'hindi'
+        if re.search(r'[中文汉字\u4e00-\u9fff]', doc_text):
+            return 'chinese'
+        if re.search(r'[ひらがなカタカナ\u3040-\u309f\u30a0-\u30ff]', doc_text):
+            return 'japanese'
+        if re.search(r'[ا-ي\u0600-\u06ff]', doc_text):
+            return 'arabic'
+        
+        # Pattern-based detection for European languages
+        language_scores = {}
+        for lang in ['spanish', 'french', 'german']:
+            score = 0
+            patterns = MULTILINGUAL_PATTERNS[lang]
+            
+            # Check all pattern categories
+            for pattern_list in [patterns['form_patterns'], patterns['tech_headings'], patterns['business_headings']]:
+                for pattern in pattern_list:
+                    if pattern in doc_text_lower:
+                        score += 1
+            
+            language_scores[lang] = score
+        
+        # Additional character-based hints for European languages
+        if re.search(r'[àáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]', doc_text):
+            language_scores['french'] = language_scores.get('french', 0) + 2
+        if re.search(r'[äöüßÄÖÜ]', doc_text):
+            language_scores['german'] = language_scores.get('german', 0) + 2
+        if re.search(r'[ñáéíóúüÑÁÉÍÓÚÜ]', doc_text):
+            language_scores['spanish'] = language_scores.get('spanish', 0) + 2
+        
+        # Return language with highest score, or None if no clear match
+        if language_scores:
+            best_lang = max(language_scores, key=language_scores.get)
+            return best_lang if language_scores[best_lang] > 1 else None
+        
+        return None
         
     def extract_outline(self, pdf_path: str) -> Dict:
         try:
             doc = fitz.open(pdf_path)
+            
+            # Get sample text for language detection
+            sample_text = ""
+            for i in range(min(3, len(doc))):
+                sample_text += doc[i].get_text()
+            
+            # Detect non-English language
+            self.detected_language = self._detect_non_english_language(sample_text)
+            if self.detected_language:
+                self.multilingual_patterns = MULTILINGUAL_PATTERNS[self.detected_language]
+            
             title = self._extract_title(doc)
             outline = self._extract_headings(doc)
             doc.close()
             
-            return {"title": title, "outline": outline}
+            result = {"title": title, "outline": outline}
+            if self.detected_language:
+                result["detected_language"] = self.detected_language
+            
+            return result
         except Exception as e:
             print(f"Error processing {pdf_path}: {e}")
             return {"title": "", "outline": []}
@@ -88,8 +251,14 @@ class PDFOutlineExtractor:
             doc_text += doc[i].get_text()
         doc_text_lower = doc_text.lower()
         
+        # Original English form detection (unchanged)
         if 'application form' in doc_text_lower or 'government servant' in doc_text_lower:
             return []
+        
+        # Additional multilingual form detection
+        if self.multilingual_patterns:
+            if any(pattern in doc_text_lower for pattern in self.multilingual_patterns['form_patterns']):
+                return []
         
         for page_num in range(len(doc)):
             page = doc[page_num]
@@ -147,12 +316,18 @@ class PDFOutlineExtractor:
         if any(pattern in text for pattern in garbage_patterns):
             return True
         
+        # Original English form patterns (unchanged)
         form_patterns = [
             'name of the government servant', 'designation', 'service', 'pay + si + npa',
             'whether permanent or temporary', 'home town as recorded', 'amount of advance required'
         ]
         if any(pattern in text.lower() for pattern in form_patterns):
             return True
+        
+        # Additional multilingual form pattern detection
+        if self.multilingual_patterns:
+            if any(pattern in text.lower() for pattern in self.multilingual_patterns['form_patterns']):
+                return True
         
         if re.match(r'^RFP:.*\d{4}$', text) or re.match(r'^\d+$', text):
             return True
@@ -187,6 +362,14 @@ class PDFOutlineExtractor:
         if size > 16:
             return True
         
+        # Additional multilingual heading detection
+        if self.multilingual_patterns:
+            if any(heading in text.lower() for heading in self.multilingual_patterns['tech_headings']):
+                return True
+            if any(heading in text.lower() for heading in self.multilingual_patterns['business_headings']):
+                return True
+        
+        # Original English logic (completely unchanged)
         if 'foundation level' in doc_text_lower:
             tech_headings = [
                 'revision history', 'table of contents', 'acknowledgements',
@@ -228,6 +411,7 @@ class PDFOutlineExtractor:
                 seen.add(text)
                 unique_headings.append(heading)
         
+        # Original English logic (completely unchanged)
         if 'pathway options' in doc_text_lower or 'stem pathways' in doc_text_lower:
             for heading in unique_headings:
                 if 'pathway options' in heading["text"].lower():
@@ -244,7 +428,22 @@ class PDFOutlineExtractor:
             result = []
             for heading in unique_headings:
                 text = heading["text"].lower()
+                level = "H3"  # default level
                 
+                # Multilingual classification (if language detected)
+                if self.multilingual_patterns:
+                    # Primary headings from multilingual patterns
+                    if any(section in text for section in self.multilingual_patterns['business_headings'][:4]):
+                        level = "H1"
+                    elif any(section in text for section in self.multilingual_patterns['tech_headings'][:6]):
+                        level = "H1"
+                    # Secondary headings from multilingual patterns
+                    elif any(section in text for section in self.multilingual_patterns['business_headings'][4:]):
+                        level = "H2"
+                    elif any(section in text for section in self.multilingual_patterns['tech_headings'][6:]):
+                        level = "H2"
+                
+                # Original English classification logic (unchanged)
                 if 'rfp' in doc_text_lower or 'digital library' in doc_text_lower:
                     if any(section in text for section in ['summary', 'background', 'milestones', 'approach', 'evaluation']):
                         level = "H1"
@@ -253,6 +452,7 @@ class PDFOutlineExtractor:
                     else:
                         level = "H3"
                 else:
+                    # Size-based classification (original logic)
                     if heading["size"] > 16:
                         level = "H1"
                     elif heading["size"] > 14:
